@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<meta charset="UTF-8">
+<style>
+  body {
+    font-family: "Gill Sans", sans-serif;
+    background-color: plum;
+  }
+  .DropZone {
+    width: 10em;
+    height: 5.25em;
+    padding-top: 4em;
+    background-color: BlanchedAlmond;
+    border-radius: 2em;
+    margin-bottom: 1em;
+    border: 2px solid Orchid;
+   }
+</style>
+</head>
+<body>
+  <center>
+  <h2>Some operations may take a while.</h2>
+  <div>
+    <div id="drop-target" class="DropZone">Drag Image Here</div>
+  </div>
+<div>
+    <select id="filterChoice">
+      <option value="invert">Invert</option>
+      <option value="grayscale">Grayscale</option>
+      <option value="bw">Black/White</option>
+      <option value="colorNoise">Color Noise</option>
+      <option value="confetti">Confetti</option>
+      <option value="colorSplit">Color Split</option>
+      <option value="colorSplitRand">Color Split Rand</option>
+      <option value="colorSplitRandSingle">Color Split Rand Single</option>
+      <option value="colorSplitOnce">Color Split Once</option>
+      <option value="scatter">Scatter</option>
+      <option value="multiScatter">Multi-Scatter</option>
+      <option value="hueshift">Hue Shift</option>
+      <option value="contrastBoost">Contrast</option>
+      <option value="saturationBoost">Saturate</option>
+      <option value="desaturate">Desaturate</option>
+      <option value="brightnessBoost">Brighten</option>
+      <option value="blur">Blur</option>
+      <option value="chanceBlur">Chance Blur (not working)</option>
+      <option value="abstractColors">Abstract Colors</option>
+    </select>
+    <button id="filterbtn">Filter</button>
+    <button id="savebtn">Save</button>
+    <button id="revertbtn">Revert to Original</button>
+</div>
+  <img id="image" src="./image/daisy/daisy50.jpg" hidden></img>
+    <canvas id="canvas" width="1" height="1"></canvas>
+  </center>
+  <script type="text/javascript" src="filter.js"></script>
+</body>
+
+</html>
