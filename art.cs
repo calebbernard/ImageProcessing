@@ -15,7 +15,7 @@ namespace Art
     {
         Bitmap img;
         Grid<ArtColor> canvas;
-        int SizeCols, SizeRows, colorDepth, gridSize;
+        protected int SizeCols, SizeRows, colorDepth, gridSize;
         System.Drawing.Imaging.PixelFormat pixelFormat;
         
         public art()
@@ -67,25 +67,47 @@ namespace Art
             img.Save("../../imgOutput/" + name + ".bmp");//".png", System.Drawing.Imaging.ImageFormat.Png);
         }
 
+
+        protected class HilbertOperation : GridMethods<bool, Tuple<Grid<bool>, art>>
+        {
+            public HilbertOperation(Tuple<Grid<bool>, art> _context) : base(_context)
+            {
+            }
+
+            public override bool Map2D(out bool update, int row, int col)
+            {
+                update = false;
+                bool value = context.Item1.GetCell(row, col);
+                for (int subRow = 0; subRow < context.Item2.gridSize; subRow++)
+                {
+                    for (int subCol = 0; subCol < context.Item2.gridSize; subCol++)
+                    {
+                        context.Item1.SetCell((row * context.Item2.gridSize) + subRow, (col * context.Item2.gridSize) + subCol, value);
+                    }
+                }
+                return true;
+            }
+        }
         private void HilbertFill()
         {
             var curve = HilbertCurve.GenerateHilbertCurve(HilbertIterationsRequired());
             // inflate curve to gridSize (this could be a grid method eventually)
             var temp = new Grid<bool>(curve.sizeRows * gridSize, curve.sizeCols * gridSize);
-            for (int row = 0; row < curve.sizeRows; row++)
-            {
-                for (int col = 0; col < curve.sizeCols; col++)
-                {
-                    bool value = curve.GetCell(row, col);
-                    for (int subRow = 0; subRow < gridSize; subRow++)
-                    {
-                        for (int subCol = 0; subCol < gridSize; subCol++)
-                        {
-                            temp.SetCell((row * gridSize) + subRow, (col * gridSize) + subCol, value);
-                        }
-                    }
-                }
-            }
+            curve.For2D(new HilbertOperation(new Tuple<Grid<bool>, art>(temp, this)));
+            //for (int row = 0; row < curve.sizeRows; row++)
+            //{
+            //    for (int col = 0; col < curve.sizeCols; col++)
+            //    {
+            //        bool value = curve.GetCell(row, col);
+            //        for (int subRow = 0; subRow < gridSize; subRow++)
+            //        {
+            //            for (int subCol = 0; subCol < gridSize; subCol++)
+            //            {
+            //                temp.SetCell((row * gridSize) + subRow, (col * gridSize) + subCol, value);
+            //            }
+            //        }
+            //    }
+            //}
             curve = temp;
 
             curve = curve.Crop(0, 0, SizeRows, SizeCols);
@@ -243,7 +265,7 @@ namespace Art
             red %= 256;
             green %= 256;
             blue %= 256;
-            green = Math.Min(Math.Max(100, green), 200);
+            green = green.Clamp(100, 200);
             return new ArtColor(red % 256, green % 256, blue % 256);
         }
 
@@ -307,8 +329,8 @@ namespace Art
 
         private bool testCoord(int row, int col)
         {
-            int smallRow = (int)(Math.Floor(row / 32.0));
-            int smallCol = (int)(Math.Floor(col / 32.0));
+            int smallRow = row.FloorDivide(32);
+            int smallCol = col.FloorDivide(32);
             if (smallRow % 2 != smallCol % 2)
             {
                 return true;
@@ -330,16 +352,17 @@ namespace Art
 
     public class ArtColor
     {
-        private int _red, _green, _blue;
-        public int red { get => _red; set { _red = clamp(value); } }
-        public int green { get => _green; set { _green = clamp(value); } }
-        public int blue { get => _blue; set { _blue = clamp(value); } }
+        private int _red, _green, _blue, colorRange;
+        public int red { get => _red; set { _red = value.Clamp(0, colorRange); } }
+        public int green { get => _green; set { _green = value.Clamp(0, colorRange); } }
+        public int blue { get => _blue; set { _blue = value.Clamp(0, colorRange); } }
 
-        public ArtColor(int r, int g, int b)
+        public ArtColor(int r, int g, int b, int _colorRange = 256)
         {
             red = r;
             green = g;
             blue = b;
+            colorRange = _colorRange - 1;
         }
 
         public ArtColor()
@@ -347,16 +370,49 @@ namespace Art
             red = 0;
             green = 0;
             blue = 0;
+            colorRange = 255;
         }
 
         public System.Drawing.Color Render()
         {
             return System.Drawing.Color.FromArgb(red, green, blue);
         }
+    }
 
-        private static int clamp (int val)
+    public abstract class Map2DOld<T> where T : new()
+    {
+        public enum OrderEnum
         {
-            return Math.Min(Math.Max(val, 0), 255);
+            Beginning,
+            End,
+            Only
+        }
+        private List<List<T>> resultInProgress;
+        private List<T> rowInProgress;
+        public virtual List<List<T>> Bookend(List<List<T>> input, OrderEnum order)
+        {
+            if (order == OrderEnum.Beginning)
+            {
+                resultInProgress = new List<List<T>>();
+            }
+            return resultInProgress;
+        }
+        public virtual List<T> Row(List<T> input, OrderEnum order)
+        {
+            if (order == OrderEnum.Beginning)
+            {
+                rowInProgress = new List<T>();
+            } else if (order == OrderEnum.End)
+            {
+                resultInProgress.Add(rowInProgress);
+            }
+            return rowInProgress;
+        }
+        public virtual T Cell(T input, OrderEnum order)
+        {
+            var cell = new T();
+            rowInProgress.Add(cell);
+            return cell;
         }
     }
 
@@ -445,6 +501,22 @@ namespace Art
                 }
             }
             return true;
+        }
+
+        public void For2D(GridMethods<T> handler)
+        {
+            for (int row = 0; row < sizeRows; row++)
+            {
+                for (int col = 0; col < sizeCols; col++)
+                {
+                    bool update;
+                    T cell = handler.Map2D(out update, row, col);
+                    if (update)
+                    {
+                        SetCell(row, col, cell);
+                    }
+                }
+            }
         }
 
         public List<T> diagnostic()
@@ -629,6 +701,50 @@ namespace Art
                 result = IterateHilbertCurve(result);
             }
             return ResolveCurve(result);
+        }
+    }
+
+    public static class Methods
+    {
+        public static int Clamp(this int val, int min, int max)
+        {
+            return Math.Min(Math.Max(val, min), max);
+        }
+
+        public static int FloorDivide(this int numerator, int denominator)
+        {
+            return (int)(Math.Floor(numerator / (double)denominator));
+        }
+
+        public static int FloorDivide(this int numerator, double denominator)
+        {
+            return (int)(Math.Floor(numerator / denominator));
+        }
+
+        public static int FloorDivide(this double numerator, int denominator)
+        {
+            return (int)(Math.Floor(numerator / denominator));
+        }
+
+        public static int FloorDivide(this double numerator, double denominator)
+        {
+            return (int)(Math.Floor(numerator / denominator));
+        }
+
+        
+    }
+
+    public class GridMethods<T, Context> where T : new()
+    {
+        protected Context context;
+        public GridMethods(Context _context)
+        {
+            context = _context;
+        }
+        public virtual T Map2D(out bool update, int row, int col)
+        {
+            update = true;
+            return new T();
         }
     }
 }
