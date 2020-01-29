@@ -25,7 +25,7 @@ namespace Art
             //fishEye();
             //blur();
             HilbertFill();
-            saveBMP("Test2");
+            saveBMP("Test3");
         }
 
         private void init()
@@ -68,63 +68,26 @@ namespace Art
         }
 
 
-        protected class HilbertOperation : GridMethods<bool, Tuple<Grid<bool>, art>>
-        {
-            public HilbertOperation(Tuple<Grid<bool>, art> _context) : base(_context)
-            {
-            }
-
-            public override bool Map2D(out bool update, int row, int col)
-            {
-                update = false;
-                bool value = context.Item1.GetCell(row, col);
-                for (int subRow = 0; subRow < context.Item2.gridSize; subRow++)
-                {
-                    for (int subCol = 0; subCol < context.Item2.gridSize; subCol++)
-                    {
-                        context.Item1.SetCell((row * context.Item2.gridSize) + subRow, (col * context.Item2.gridSize) + subCol, value);
-                    }
-                }
-                return true;
-            }
-        }
         private void HilbertFill()
         {
             var curve = HilbertCurve.GenerateHilbertCurve(HilbertIterationsRequired());
             // inflate curve to gridSize (this could be a grid method eventually)
             var temp = new Grid<bool>(curve.sizeRows * gridSize, curve.sizeCols * gridSize);
-            curve.For2D(new HilbertOperation(new Tuple<Grid<bool>, art>(temp, this)));
-            //for (int row = 0; row < curve.sizeRows; row++)
-            //{
-            //    for (int col = 0; col < curve.sizeCols; col++)
-            //    {
-            //        bool value = curve.GetCell(row, col);
-            //        for (int subRow = 0; subRow < gridSize; subRow++)
-            //        {
-            //            for (int subCol = 0; subCol < gridSize; subCol++)
-            //            {
-            //                temp.SetCell((row * gridSize) + subRow, (col * gridSize) + subCol, value);
-            //            }
-            //        }
-            //    }
-            //}
+            foreach (Cell<bool> C in curve.EachCell())
+            {
+                bool value = curve.GetCell(C.row, C.col);
+                foreach (var C2 in Methods.EachPoint(gridSize, gridSize))
+                {
+                    temp.SetCell((C.row * gridSize) + C2.row, (C.col * gridSize) + C2.col, value);
+                }
+            }
             curve = temp;
 
             curve = curve.Crop(0, 0, SizeRows, SizeCols);
 
-            for (int row = 0; row < SizeRows; row++)
+            foreach (var cell in curve.EachCell())
             {
-                for (int col = 0; col < SizeCols; col++)
-                {
-                    canvas.SetCell(row, col, funColor2(row, col, curve.GetCell(row, col)));
-                    //if (curve.GetCell(row, col) == true)
-                    //{
-                    //    canvas.SetCell(row, col, new ArtColor(255, 0, 0));
-                    //} else
-                    //{
-                    //    canvas.SetCell(row, col, new ArtColor(0, 0, 0));
-                    //}
-                }
+                canvas.SetCell(cell.row, cell.col, funColor2(cell.row, cell.col, curve.GetCell(cell.row, cell.col)));
             }
         }
 
@@ -182,7 +145,7 @@ namespace Art
                     List<Color> neighborColors = new List<Color>();
                     foreach (var n in neighbors)
                     {
-                        neighborColors.Add(img.GetPixel(n.x, n.y));
+                        neighborColors.Add(img.GetPixel(n.row, n.col));
                     }
                     int red = neighborColors.Select(z => (int)z.R).Cast<int>().Sum() / neighborColors.Count();
                     int green = neighborColors.Select(z => (int)z.G).Cast<int>().Sum() / neighborColors.Count();
@@ -341,12 +304,12 @@ namespace Art
 
     public class Coord
     {
-        public int x, y;
+        public int row, col;
 
-        public Coord(int _x, int _y)
+        public Coord(int _row, int _col)
         {
-            x = _x;
-            y = _y;
+            row = _row;
+            col = _col;
         }
     }
 
@@ -379,68 +342,45 @@ namespace Art
         }
     }
 
-    public abstract class Map2DOld<T> where T : new()
+    public class Cell<T> where T : new()
     {
-        public enum OrderEnum
+        private int _row, _col;
+        public int row { get { return _row; } set { } }
+        public int col { get { return _col; } set { } }
+        public T value;
+        public Cell(int r, int c)
         {
-            Beginning,
-            End,
-            Only
-        }
-        private List<List<T>> resultInProgress;
-        private List<T> rowInProgress;
-        public virtual List<List<T>> Bookend(List<List<T>> input, OrderEnum order)
-        {
-            if (order == OrderEnum.Beginning)
-            {
-                resultInProgress = new List<List<T>>();
-            }
-            return resultInProgress;
-        }
-        public virtual List<T> Row(List<T> input, OrderEnum order)
-        {
-            if (order == OrderEnum.Beginning)
-            {
-                rowInProgress = new List<T>();
-            } else if (order == OrderEnum.End)
-            {
-                resultInProgress.Add(rowInProgress);
-            }
-            return rowInProgress;
-        }
-        public virtual T Cell(T input, OrderEnum order)
-        {
-            var cell = new T();
-            rowInProgress.Add(cell);
-            return cell;
+            _row = r;
+            _col = c;
+            value = new T();
         }
     }
 
     public class Grid<T> where T : new()
     {
         public int sizeCols, sizeRows;
-        List<List<T>> grid;
+        List<List<Cell<T>>> grid;
         public Grid(int _sizeRows, int _sizeCols)
         {
             sizeRows = _sizeRows;
             sizeCols = _sizeCols;
-            grid = new List<List<T>>();
+            grid = new List<List<Cell<T>>>();
             for (int row = 0; row < sizeRows; row++)
             {
-                var gridRow = new List<T>();
+                var gridRow = new List<Cell<T>>();
                 for (int col = 0; col < sizeCols; col++)
                 {
-                    gridRow.Add(new T());
+                    gridRow.Add(new Cell<T>(row, col));
                 }
                 grid.Add(gridRow);
             }
         }
 
-        public bool SetCell(int row, int col, T c)
+        public bool SetCell(int row, int col, T value)
         {
             if (row >= 0 && row < sizeRows && col >= 0 && col < sizeCols)
             {
-                grid[row][col] = c;
+                grid[row][col].value = value;
                 return true;
             }
             return false;
@@ -450,7 +390,7 @@ namespace Art
         {
             if (row >= 0 && row < sizeRows && col >= 0 && col < sizeCols)
             {
-                return grid[row][col];
+                return grid[row][col].value;
             }
             throw new Exception("Coordinates out of range");
         }
@@ -467,69 +407,40 @@ namespace Art
         public Grid<T> Crop(int topLeftRow, int topLeftCol, int _sizeRows, int _sizeCols)
         {
             var result = new Grid<T>(_sizeRows, _sizeCols);
-            for (int row = 0; row < _sizeRows; row++)
+            foreach (var C in Methods.EachPoint(_sizeRows, _sizeCols))
             {
-                for (int col = 0; col < _sizeCols; col++)
+                if (!InFrame(topLeftRow + C.row, topLeftCol + C.col))
                 {
-                    if (!InFrame(topLeftRow + row, topLeftCol + col))
-                    {
-                        result.SetCell(row, col, new T());
-                    } else
-                    {
-                        result.SetCell(row, col, GetCell((topLeftRow + row), (topLeftCol + col)));
-                    }
+                    result.SetCell(C.row, C.col, new T());
                 }
-            }
+                else
+                {
+                    result.SetCell(C.row, C.col, GetCell((topLeftRow + C.row), (topLeftCol + C.col)));
+                }
+            }     
             return result;
+        }
+
+        public List<Cell<T>> EachCell()
+        {
+            return grid.SelectMany(x => x).ToList();
         }
 
         // to do: "blend" action that's like stamp, but calls a method on T for resolving the interaction
         //      also: revisit this method when adding opacity
         public bool Stamp(int topLeftRow, int topLeftCol, Grid<T> grid)
         {
-            for (int row = 0; row < grid.sizeRows; row++)
+            foreach (var C in Methods.EachPoint(grid.sizeRows, grid.sizeCols))
             {
-                for (int col = 0; col < grid.sizeCols; col++)
+                int offsetRow = topLeftRow + C.row;
+                int offsetCol = topLeftCol + C.col;
+                if (offsetRow >= 0 && offsetRow < sizeRows
+                    && offsetCol >= 0 && offsetCol < sizeCols)
                 {
-                    int offsetRow = topLeftRow + row;
-                    int offsetCol = topLeftCol + col;
-                    if (offsetRow >= 0 && offsetRow < sizeRows
-                        && offsetCol >= 0 && offsetCol < sizeCols)
-                    {
-                        SetCell(offsetRow, offsetCol, grid.GetCell(row, col));
-                    }
+                    SetCell(offsetRow, offsetCol, grid.GetCell(C.row, C.col));
                 }
             }
             return true;
-        }
-
-        public void For2D(GridMethods<T> handler)
-        {
-            for (int row = 0; row < sizeRows; row++)
-            {
-                for (int col = 0; col < sizeCols; col++)
-                {
-                    bool update;
-                    T cell = handler.Map2D(out update, row, col);
-                    if (update)
-                    {
-                        SetCell(row, col, cell);
-                    }
-                }
-            }
-        }
-
-        public List<T> diagnostic()
-        {
-            var result = new List<T>();
-            for (int row = 0; row < sizeRows; row++)
-            {
-                for (int col = 0; col < sizeCols; col++)
-                {
-                    result.Add(GetCell(row, col));
-                }
-            }
-            return result;
         }
     }
 
@@ -574,39 +485,39 @@ namespace Art
             return result;
         }
 
+        private static Grid<HilbertCurveComponent> IterateCurveComponent(HilbertCurveComponent component)
+        {
+            List<HilbertCurveComponent> list;
+            switch (component)
+            {
+                case HilbertCurveComponent.A:
+                    list = new List<HilbertCurveComponent> { HilbertCurveComponent.A, HilbertCurveComponent.A, 
+                                                             HilbertCurveComponent.D, HilbertCurveComponent.B };
+                    break;
+                case HilbertCurveComponent.B:
+                    list = new List<HilbertCurveComponent> { HilbertCurveComponent.B, HilbertCurveComponent.C, 
+                                                             HilbertCurveComponent.B, HilbertCurveComponent.A };
+                    break;
+                case HilbertCurveComponent.C:
+                    list = new List<HilbertCurveComponent> { HilbertCurveComponent.D, HilbertCurveComponent.B, 
+                                                             HilbertCurveComponent.C, HilbertCurveComponent.C };
+                    break;
+                case HilbertCurveComponent.D:
+                    list = new List<HilbertCurveComponent> { HilbertCurveComponent.C, HilbertCurveComponent.D, 
+                                                             HilbertCurveComponent.A, HilbertCurveComponent.D };
+                    break;
+                default:
+                    throw new Exception("Hilbert Curve component " + component.ToString() + " not handled in IterateCurveComponent()");
+            }
+            return list.ToGrid(2, 2);
+        }
+
         private static Grid<HilbertCurveComponent> IterateHilbertCurve(Grid<HilbertCurveComponent> start)
         {
             var finish = new Grid<HilbertCurveComponent>(start.sizeRows * 2, start.sizeCols * 2);
-            for (int row = 0; row < start.sizeRows; row++)
+            foreach (var C in start.EachCell())
             {
-                for (int col = 0; col < start.sizeCols; col++)
-                {
-                    if (start.GetCell(row, col) == HilbertCurveComponent.A)
-                    {
-                        finish.SetCell((row * 2), (col * 2), HilbertCurveComponent.A); // top left
-                        finish.SetCell((row * 2), (col * 2) + 1, HilbertCurveComponent.A); // top right
-                        finish.SetCell((row * 2) + 1, (col * 2), HilbertCurveComponent.D); // bottom left
-                        finish.SetCell((row * 2) + 1, (col * 2) + 1, HilbertCurveComponent.B); // bottom right
-                    } else if (start.GetCell(row, col) == HilbertCurveComponent.B)
-                    {
-                        finish.SetCell((row * 2), (col * 2), HilbertCurveComponent.B); // top left
-                        finish.SetCell((row * 2), (col * 2) + 1, HilbertCurveComponent.C); // top right
-                        finish.SetCell((row * 2) + 1, (col * 2), HilbertCurveComponent.B); // bottom left
-                        finish.SetCell((row * 2) + 1, (col * 2) + 1, HilbertCurveComponent.A); // bottom right
-                    } else if (start.GetCell(row, col) == HilbertCurveComponent.C)
-                    {
-                        finish.SetCell((row * 2), (col * 2), HilbertCurveComponent.D); // top left
-                        finish.SetCell((row * 2), (col * 2) + 1, HilbertCurveComponent.B); // top right
-                        finish.SetCell((row * 2) + 1, (col * 2), HilbertCurveComponent.C); // bottom left
-                        finish.SetCell((row * 2) + 1, (col * 2) + 1, HilbertCurveComponent.C); // bottom right
-                    } else if (start.GetCell(row, col) == HilbertCurveComponent.D)
-                    {
-                        finish.SetCell((row * 2), (col * 2), HilbertCurveComponent.C); // top left
-                        finish.SetCell((row * 2), (col * 2) + 1, HilbertCurveComponent.D); // top right
-                        finish.SetCell((row * 2) + 1, (col * 2), HilbertCurveComponent.A); // bottom left
-                        finish.SetCell((row * 2) + 1, (col * 2) + 1, HilbertCurveComponent.D); // bottom right
-                    }
-                }
+                finish.Stamp(C.row * 2, C.col * 2, IterateCurveComponent(C.value));
             }
             return finish;
         }
@@ -622,48 +533,42 @@ namespace Art
         {
             // 1. render components to bools
             var result = new Grid<bool>(curve.sizeRows * 4, curve.sizeCols * 4);
-            for (int row = 0; row < curve.sizeRows; row++)
+            foreach (var C in curve.EachCell())
             {
-                for (int col = 0; col < curve.sizeCols; col++)
-                {
-                    result.Stamp(row * 4, col * 4, ResolveComponent(curve.GetCell(row, col)));
-                }
+                result.Stamp(C.row * 4, C.col * 4, ResolveComponent(C.value));
             }
 
             // 2. connect the blocks
-            for (int row = 0; row < result.sizeRows; row++)
+            foreach (var C in result.EachCell())
             {
-                for (int col = 0; col < result.sizeCols; col++)
+                if (C.value == true && CountNeighbors(result, C.row, C.col) == 1)
                 {
-                    if (result.GetCell(row, col) == true && CountNeighbors(result, row, col) == 1)
+                    if (C.row > 1) // check left connection
                     {
-                        if (row > 1) // check left connection
+                        if (CountNeighbors(result, C.row - 2, C.col) == 1 && curve.GetCell(C.row.FloorDivide(4), C.col.FloorDivide(4)) != HilbertCurveComponent.D)
                         {
-                            if (CountNeighbors(result, row - 2, col) == 1 && curve.GetCell((int)Math.Floor(row / 4.0), (int)Math.Floor(col / 4.0)) != HilbertCurveComponent.D)
-                            {
-                                result.SetCell(row - 1, col, true);
-                            }
+                            result.SetCell(C.row - 1, C.col, true);
                         }
-                        if (row < result.sizeRows - 2) // check right connection
+                    }
+                    if (C.row < result.sizeRows - 2) // check right connection
+                    {
+                        if (CountNeighbors(result, C.row + 2, C.col) == 1 && curve.GetCell(C.row.FloorDivide(4), C.col.FloorDivide(4)) != HilbertCurveComponent.B)
                         {
-                            if (CountNeighbors(result, row + 2, col) == 1 && curve.GetCell((int)Math.Floor(row / 4.0), (int)Math.Floor(col / 4.0)) != HilbertCurveComponent.B)
-                            {
-                                result.SetCell(row + 1, col, true);
-                            }
+                            result.SetCell(C.row + 1, C.col, true);
                         }
-                        if (col > 1) // check up connection
+                    }
+                    if (C.col > 1) // check up connection
+                    {
+                        if (CountNeighbors(result, C.row, C.col - 2) == 1 && curve.GetCell(C.row.FloorDivide(4), C.col.FloorDivide(4)) != HilbertCurveComponent.C)
                         {
-                            if (CountNeighbors(result, row, col - 2) == 1 && curve.GetCell((int)Math.Floor(row / 4.0), (int)Math.Floor(col / 4.0)) != HilbertCurveComponent.C)
-                            {
-                                result.SetCell(row, col - 1, true);
-                            }
+                            result.SetCell(C.row, C.col - 1, true);
                         }
-                        if (col < result.sizeCols - 2) // check down connection
+                    }
+                    if (C.col < result.sizeCols - 2) // check down connection
+                    {
+                        if (CountNeighbors(result, C.row, C.col + 2) == 1 && curve.GetCell(C.row.FloorDivide(4), C.col.FloorDivide(4)) != HilbertCurveComponent.A)
                         {
-                            if (CountNeighbors(result, row, col + 2) == 1 && curve.GetCell((int)Math.Floor(row / 4.0), (int)Math.Floor(col / 4.0)) != HilbertCurveComponent.A)
-                            {
-                                result.SetCell(row, col + 1, true);
-                            }
+                            result.SetCell(C.row, C.col + 1, true);
                         }
                     }
                 }
@@ -731,20 +636,42 @@ namespace Art
             return (int)(Math.Floor(numerator / denominator));
         }
 
-        
-    }
-
-    public class GridMethods<T, Context> where T : new()
-    {
-        protected Context context;
-        public GridMethods(Context _context)
+        public static List<Coord> EachPoint(int rows, int cols)
         {
-            context = _context;
+            var result = new List<Coord>();
+            for (int row = 0; row < rows; row++)
+            {
+                for (int col = 0; col < cols; col++)
+                {
+                    result.Add(new Coord(row, col));
+                }
+            }
+            return result;
         }
-        public virtual T Map2D(out bool update, int row, int col)
+
+        public static List<List<T>> InitializeRect<T>(this List<List<T>> rect, int rows, int cols) where T : new()
         {
-            update = true;
-            return new T();
+            var result = new List<List<T>>();
+            for (int row = 0; row < rows; row++)
+            {
+                var r = new List<T>();
+                for (int col = 0; col < cols; col++)
+                {
+                    r.Add(new T());
+                }
+                result.Add(r);
+            }
+            return result;
+        }
+
+        public static Grid<T> ToGrid<T>(this List<T> list, int rows, int cols) where T : new()
+        {
+            var grid = new Grid<T>(rows, cols);
+            foreach(var C in grid.EachCell())
+            {
+                C.value = list[(C.row * cols) + C.col];
+            }
+            return grid;
         }
     }
 }
