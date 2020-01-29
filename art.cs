@@ -15,7 +15,8 @@ namespace Art
     {
         Bitmap img;
         Grid<ArtColor> canvas;
-        protected int SizeCols, SizeRows, colorDepth, gridSize;
+        protected Coord size;
+        protected int colorDepth, gridSize;
         System.Drawing.Imaging.PixelFormat pixelFormat;
         
         public art()
@@ -31,40 +32,35 @@ namespace Art
         private void init()
         {
             gridSize = 32;
-            SizeCols = gridSize * 63;
-            SizeRows = gridSize * 63;
+            size = new Coord(gridSize * 63, gridSize * 63);
             colorDepth = 256;
             
             pixelFormat = System.Drawing.Imaging.PixelFormat.Format24bppRgb;
             img = newBMP();
-            canvas = new Grid<ArtColor>(SizeRows, SizeCols);
+            canvas = new Grid<ArtColor>(size);
         }
 
-        private Bitmap newBMP(int newSizeHorizontal = 0, int newSizeVertical = 0)
+        private Bitmap newBMP(Coord arg_size = null)
         {
-            if (newSizeHorizontal > 0 && newSizeVertical > 0)
+            if (size == null)
             {
-                SizeCols = newSizeHorizontal;
-                SizeRows = newSizeVertical;
+                arg_size = size;
             }
-            return new Bitmap(SizeRows, SizeCols, pixelFormat);
+            return new Bitmap(arg_size.row, arg_size.col, pixelFormat);
         }
 
         private void CanvasToBMP()
         {
-            for (int row = 0; row < SizeRows; row++)
+            foreach (var C in canvas.EachCell())
             {
-                for (int col = 0; col < SizeCols; col++)
-                {
-                    img.SetPixel(row, col, canvas.GetCell(row, col).Render());
-                }
+                img.SetPixel(C.loc.row, C.loc.col, C.value.Render());
             }
         }
 
         private void saveBMP(string name)
         {
             CanvasToBMP();
-            img.Save("../../imgOutput/" + name + ".bmp");//".png", System.Drawing.Imaging.ImageFormat.Png);
+            img.Save("../../ImgOutput/" + name + ".bmp");//".png", System.Drawing.Imaging.ImageFormat.Png);
         }
 
 
@@ -72,40 +68,37 @@ namespace Art
         {
             var curve = HilbertCurve.GenerateHilbertCurve(HilbertIterationsRequired());
             // inflate curve to gridSize (this could be a grid method eventually)
-            var temp = new Grid<bool>(curve.sizeRows * gridSize, curve.sizeCols * gridSize);
+            var temp = new Grid<bool>(curve.gridSize.Times(gridSize));
             foreach (Cell<bool> C in curve.EachCell())
             {
-                bool value = curve.GetCell(C.row, C.col);
-                foreach (var C2 in Methods.EachPoint(gridSize, gridSize))
+                bool value = curve.GetCell(C.loc);
+                foreach (var C2 in Methods.EachPoint(new Coord(gridSize)))
                 {
-                    temp.SetCell((C.row * gridSize) + C2.row, (C.col * gridSize) + C2.col, value);
+                    temp.SetCell(C.loc.Times(gridSize).Plus(C2), value);
                 }
             }
             curve = temp;
 
-            curve = curve.Crop(0, 0, SizeRows, SizeCols);
+            curve = curve.Crop(new Coord(0,0), new Coord(gridSize));
 
             foreach (var cell in curve.EachCell())
             {
-                canvas.SetCell(cell.row, cell.col, funColor2(cell.row, cell.col, curve.GetCell(cell.row, cell.col)));
+                canvas.SetCell(cell.loc, funColor2(cell.loc, cell.value));
             }
         }
 
         private void testFill()
         {
-            for (int row = 0; row < SizeRows; row++)
+            foreach(var C in size.EachPoint())
             {
-                for (int col = 0; col < SizeCols; col++)
-                {
-                    img.SetPixel(row, col, CheckerColor(row, col).Render());
-                }
+                canvas.SetCell(C, CheckerColor(C));
             }
         }
 
-        private ArtColor CheckerColor(int x, int y)
+        private ArtColor CheckerColor(Coord loc)
         {
             int red, green, blue;
-            if ((Math.Floor(x /32.0) % 2) != (Math.Floor(y / 32.0) % 2))
+            if ((loc.row.FloorDivide(32) % 2) != (loc.col.FloorDivide(32) % 2))
             {
                 red = 255;
             } else
@@ -119,75 +112,49 @@ namespace Art
 
         private void blur()
         {
-            var buffer = newBMP();
-            for (int row = 0; row < SizeRows; row++)
+            var buffer = new Grid<ArtColor>(size);
+            foreach (var C in size.EachPoint())
             {
-                for (int col = 0; col < SizeRows; col++)
+                var neighbors = new List<Coord>();
+                if (C.row > 0)
                 {
-                    var neighbors = new List<Coord>();
-                    if (row > 0)
-                    {
-                        neighbors.Add(new Coord(row - 1, col));
-                    }
-                    if (row < SizeCols - 1)
-                    {
-                        neighbors.Add(new Coord(row + 1, col));
-                    }
-                    if (col > 0)
-                    {
-                        neighbors.Add(new Coord(row, col - 1));
-                    }
-                    if (col < SizeRows - 1)
-                    {
-                        neighbors.Add(new Coord(row, col + 1));
-                    }
-
-                    List<Color> neighborColors = new List<Color>();
-                    foreach (var n in neighbors)
-                    {
-                        neighborColors.Add(img.GetPixel(n.row, n.col));
-                    }
-                    int red = neighborColors.Select(z => (int)z.R).Cast<int>().Sum() / neighborColors.Count();
-                    int green = neighborColors.Select(z => (int)z.G).Cast<int>().Sum() / neighborColors.Count();
-                    int blue = neighborColors.Select(z => (int)z.B).Sum() / neighborColors.Count();
-                    buffer.SetPixel(row, col, new ArtColor(red, green, blue).Render());
+                    neighbors.Add(C.Plus(new Coord(-1, 0)));
                 }
+                if (C.row < size.row - 1)
+                {
+                    neighbors.Add(C.Plus(new Coord(1, 0)));
+                }
+                if (C.col > 0)
+                {
+                    neighbors.Add(C.Plus(new Coord(0, -1)));
+                }
+                if (C.col < size.col - 1)
+                {
+                    neighbors.Add(C.Plus(new Coord(0, 1)));
+                }
+
+                List<ArtColor> neighborColors = new List<ArtColor>();
+                foreach (var n in neighbors)
+                {
+                    neighborColors.Add(canvas.GetCell(n));
+                }
+                int red = neighborColors.Select(z => z.red).Cast<int>().Sum() / neighborColors.Count();
+                int green = neighborColors.Select(z => z.green).Cast<int>().Sum() / neighborColors.Count();
+                int blue = neighborColors.Select(z => z.blue).Sum() / neighborColors.Count();
+                buffer.SetCell(C, new ArtColor(red, green, blue));
             }
-            img = buffer;
+            canvas = buffer;
         }
 
         private void fishEye()
         {
-            var buffer = newBMP();
-            for(int row = 0; row < SizeRows; row++)
+            var buffer = new Grid<ArtColor>(size);
+            foreach (var C in size.EachPoint())
             {
-                for (int col = 0; col < SizeCols; col++)
-                {
-                    double run = (SizeCols / 2.0) - row;
-                    double rise = (SizeRows / 2.0) - col;
-                    int fishbowlRow = row + (int)(Math.Floor(run * .05));
-                    int fishbowlCol = col + (int)(Math.Floor(rise * .05));
-                    if (fishbowlRow < 0)
-                    {
-                        fishbowlRow = 0;
-                    }
-                    if (fishbowlRow > SizeCols)
-                    {
-                        fishbowlRow = SizeCols;
-                    }
-                    if (fishbowlCol < 0)
-                    {
-                        fishbowlCol = 0;
-                    }
-                    if (fishbowlCol > SizeRows)
-                    {
-                        fishbowlCol = SizeRows;
-                    }
-
-                    buffer.SetPixel(row, col, img.GetPixel(fishbowlRow, fishbowlCol));
-                }
+                var fishbowl = C.FloorDivide(20).Plus(C);
+                buffer.SetCell(C, canvas.GetCell(fishbowl));
             }
-            img = buffer;
+            canvas = buffer;
         }
 
         private Tuple<int, int, int> spinColor(int red, int green, int blue)
@@ -200,11 +167,11 @@ namespace Art
             return new Tuple<int, int, int>(red, green, blue);
         }
 
-        private ArtColor funColor2(int row, int col, bool isHilbert)
+        private ArtColor funColor2(Coord loc, bool isHilbert)
         {
-            int red = (int)(Math.Floor((colorDepth / (double)SizeRows) * row));
-            int green = (row % gridSize * 8);
-            int blue = (col % gridSize * 8);
+            int red = colorDepth.FloorDivide(size.row) * loc.row;
+            int green = (loc.row % gridSize * 8);
+            int blue = (loc.col % gridSize * 8);
 
 
 
@@ -234,7 +201,7 @@ namespace Art
 
         private ArtColor funColor(int row, int col)
         {
-            int red = (int)(Math.Floor((colorDepth / (double)SizeCols) * row));
+            int red = colorDepth.FloorDivide(size.col) * row;
             int green = (row * 8);
             int blue = (col * 8);
 
@@ -265,12 +232,12 @@ namespace Art
         {
             // find number of recursions required
             int iterations = 1;
-            int size = 1;
+            int hilbertsize = 1;
 
-            int maxDimension = (int)Math.Floor(Math.Max(SizeCols, SizeRows) / (double)gridSize);
-            while (size < maxDimension)
+            int maxDimension = (int)Math.Floor(Math.Max(size.row, size.col) / (double)gridSize);
+            while (hilbertsize < maxDimension)
             {
-                size *= 4;
+                hilbertsize *= 4;
                 iterations++;
             }
             return iterations;
@@ -311,6 +278,59 @@ namespace Art
             row = _row;
             col = _col;
         }
+
+        public Coord(int _square)
+        {
+            row = _square;
+            col = _square;
+        }
+
+        public bool InRange(Coord topLeft, Coord bottomRight)
+        {
+            if (topLeft.row >= 0 && topLeft.row < bottomRight.row
+                && topLeft.col >= 0 && topLeft.col < bottomRight.col)
+            {
+                return true;
+            }
+            return false;
+        }
+        public bool Clamp(Coord lowerBound, Coord upperBound)
+        {
+            var result = false;
+            if (row < lowerBound.row)
+            {
+                result = true;
+                row = lowerBound.row;
+            }
+            if (col < lowerBound.col)
+            {
+                result = true;
+                col = lowerBound.col;
+            }
+            if (row > upperBound.row)
+            {
+                result = true;
+                row = upperBound.row;
+            }
+            if (col > upperBound.col)
+            {
+                result = true;
+                col = upperBound.col;
+            }
+            return result;
+        }
+        public Coord Times(int factor)
+        {
+            return new Coord(row * factor, col * factor);
+        }
+        public Coord Plus(Coord offset)
+        {
+            return new Coord(row + offset.row, col + offset.col);
+        }
+        public Coord FloorDivide(int factor)
+        {
+            return new Coord(row.FloorDivide(factor), col.FloorDivide(factor));
+        }
     }
 
     public class ArtColor
@@ -344,78 +364,73 @@ namespace Art
 
     public class Cell<T> where T : new()
     {
-        private int _row, _col;
-        public int row { get { return _row; } set { } }
-        public int col { get { return _col; } set { } }
+        private Coord _loc;
+        public Coord loc { get { return _loc; } set { } }
         public T value;
-        public Cell(int r, int c)
+        public Cell(Coord c)
         {
-            _row = r;
-            _col = c;
+            _loc = c;
             value = new T();
         }
     }
 
     public class Grid<T> where T : new()
     {
-        public int sizeCols, sizeRows;
+        private Coord _gridSize;
+        public Coord gridSize { get { return _gridSize; } set { } }
         List<List<Cell<T>>> grid;
-        public Grid(int _sizeRows, int _sizeCols)
+        public Grid(Coord param_gridSize)
         {
-            sizeRows = _sizeRows;
-            sizeCols = _sizeCols;
+            _gridSize = param_gridSize;
             grid = new List<List<Cell<T>>>();
-            for (int row = 0; row < sizeRows; row++)
+            for (int row = 0; row < gridSize.row; row++)
             {
                 var gridRow = new List<Cell<T>>();
-                for (int col = 0; col < sizeCols; col++)
+                for (int col = 0; col < gridSize.col; col++)
                 {
-                    gridRow.Add(new Cell<T>(row, col));
+                    gridRow.Add(new Cell<T>(new Coord(row, col)));
                 }
                 grid.Add(gridRow);
             }
         }
 
-        public bool SetCell(int row, int col, T value)
+        public bool SetCell(Coord loc, T value)
         {
-            if (row >= 0 && row < sizeRows && col >= 0 && col < sizeCols)
+            if (InFrame(loc))
             {
-                grid[row][col].value = value;
+                grid[loc.row][loc.col].value = value;
                 return true;
             }
             return false;
         }
 
-        public T GetCell(int row, int col)
+        public T GetCell(Coord loc)
         {
-            if (row >= 0 && row < sizeRows && col >= 0 && col < sizeCols)
+            if (InFrame(loc))
             {
-                return grid[row][col].value;
+                return grid[loc.row][loc.col].value;
             }
             throw new Exception("Coordinates out of range");
         }
 
-        public bool InFrame(int row, int col)
+        public bool InFrame(Coord loc)
         {
-            if (row >= 0 && row < sizeRows && col >= 0 && col < sizeCols)
-            {
-                return true;
-            }
-            return false;
+            return loc.InRange(new Coord(0,0), gridSize);
         }
 
-        public Grid<T> Crop(int topLeftRow, int topLeftCol, int _sizeRows, int _sizeCols)
+        public Grid<T> Crop(Coord topLeft, Coord size)
         {
-            var result = new Grid<T>(_sizeRows, _sizeCols);
-            foreach (var C in Methods.EachPoint(_sizeRows, _sizeCols))
+            var result = new Grid<T>(size);
+            foreach (var C in Methods.EachPoint(size))
             {
-                if (!InFrame(topLeftRow + C.row, topLeftCol + C.col))
+                var offset = new Coord(topLeft.row + C.row, topLeft.col + C.col);
+                if (!InFrame(offset))
                 {
-                    result.SetCell(C.row, C.col, new T());
+                    result.SetCell(C, new T());
                 }
                 else
                 {
-                    result.SetCell(C.row, C.col, GetCell((topLeftRow + C.row), (topLeftCol + C.col)));
+                    result.SetCell(C, GetCell(offset));
                 }
             }     
             return result;
@@ -426,18 +441,21 @@ namespace Art
             return grid.SelectMany(x => x).ToList();
         }
 
+        public List<Coord> EachPoint()
+        {
+            return EachCell().Select(x => x.loc).ToList();
+        }
+
         // to do: "blend" action that's like stamp, but calls a method on T for resolving the interaction
         //      also: revisit this method when adding opacity
-        public bool Stamp(int topLeftRow, int topLeftCol, Grid<T> grid)
+        public bool Stamp(Coord topLeft, Grid<T> grid)
         {
-            foreach (var C in Methods.EachPoint(grid.sizeRows, grid.sizeCols))
+            foreach (var C in EachPoint())
             {
-                int offsetRow = topLeftRow + C.row;
-                int offsetCol = topLeftCol + C.col;
-                if (offsetRow >= 0 && offsetRow < sizeRows
-                    && offsetCol >= 0 && offsetCol < sizeCols)
+                Coord offset = new Coord(topLeft.row + C.row, topLeft.col + C.col);
+                if (InFrame(offset))
                 {
-                    SetCell(offsetRow, offsetCol, grid.GetCell(C.row, C.col));
+                    SetCell(offset, grid.GetCell(C));
                 }
             }
             return true;
@@ -509,15 +527,15 @@ namespace Art
                 default:
                     throw new Exception("Hilbert Curve component " + component.ToString() + " not handled in IterateCurveComponent()");
             }
-            return list.ToGrid(2, 2);
+            return list.ToGrid(new Coord(2));
         }
 
         private static Grid<HilbertCurveComponent> IterateHilbertCurve(Grid<HilbertCurveComponent> start)
         {
-            var finish = new Grid<HilbertCurveComponent>(start.sizeRows * 2, start.sizeCols * 2);
+            var finish = new Grid<HilbertCurveComponent>(start.gridSize.Times(2));
             foreach (var C in start.EachCell())
             {
-                finish.Stamp(C.row * 2, C.col * 2, IterateCurveComponent(C.value));
+                finish.Stamp(C.loc.Times(2), IterateCurveComponent(C.value));
             }
             return finish;
         }
@@ -532,43 +550,43 @@ namespace Art
         private static Grid<bool> ResolveCurve(Grid<HilbertCurveComponent> curve)
         {
             // 1. render components to bools
-            var result = new Grid<bool>(curve.sizeRows * 4, curve.sizeCols * 4);
+            var result = new Grid<bool>(curve.gridSize.Times(4));
             foreach (var C in curve.EachCell())
             {
-                result.Stamp(C.row * 4, C.col * 4, ResolveComponent(C.value));
+                result.Stamp(C.loc.Times(4), ResolveComponent(C.value));
             }
 
             // 2. connect the blocks
             foreach (var C in result.EachCell())
             {
-                if (C.value == true && CountNeighbors(result, C.row, C.col) == 1)
+                if (C.value == true && CountNeighbors(result, C.loc) == 1)
                 {
-                    if (C.row > 1) // check left connection
+                    if (C.loc.row > 1) // check left connection
                     {
-                        if (CountNeighbors(result, C.row - 2, C.col) == 1 && curve.GetCell(C.row.FloorDivide(4), C.col.FloorDivide(4)) != HilbertCurveComponent.D)
+                        if (CountNeighbors(result, C.loc.row - 2, C.loc.col) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.D)
                         {
-                            result.SetCell(C.row - 1, C.col, true);
+                            result.SetCell(C.loc.Plus(new Coord(-1, 0)), true);
                         }
                     }
-                    if (C.row < result.sizeRows - 2) // check right connection
+                    if (C.loc.row < result.gridSize.row - 2) // check right connection
                     {
-                        if (CountNeighbors(result, C.row + 2, C.col) == 1 && curve.GetCell(C.row.FloorDivide(4), C.col.FloorDivide(4)) != HilbertCurveComponent.B)
+                        if (CountNeighbors(result, C.loc.row + 2, C.loc.col) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.B)
                         {
-                            result.SetCell(C.row + 1, C.col, true);
+                            result.SetCell(C.loc.Plus(new Coord(1, 0)), true);
                         }
                     }
-                    if (C.col > 1) // check up connection
+                    if (C.loc.col > 1) // check up connection
                     {
-                        if (CountNeighbors(result, C.row, C.col - 2) == 1 && curve.GetCell(C.row.FloorDivide(4), C.col.FloorDivide(4)) != HilbertCurveComponent.C)
+                        if (CountNeighbors(result, C.loc.row, C.loc.col - 2) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.C)
                         {
-                            result.SetCell(C.row, C.col - 1, true);
+                            result.SetCell(C.loc.Plus(new Coord(0, -1)), true);
                         }
                     }
-                    if (C.col < result.sizeCols - 2) // check down connection
+                    if (C.loc.col < result.gridSize.col - 2) // check down connection
                     {
-                        if (CountNeighbors(result, C.row, C.col + 2) == 1 && curve.GetCell(C.row.FloorDivide(4), C.col.FloorDivide(4)) != HilbertCurveComponent.A)
+                        if (CountNeighbors(result, C.loc.row, C.loc.col + 2) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.A)
                         {
-                            result.SetCell(C.row, C.col + 1, true);
+                            result.SetCell(C.loc.Plus(new Coord(0, 1)), true);
                         }
                     }
                 }
@@ -576,24 +594,24 @@ namespace Art
             return result;
         }
 
-        private static int CountNeighbors(Grid<bool> grid, int row, int col)
+        private static int CountNeighbors(Grid<bool> grid, Coord loc)
         {
             int count = 0;
-            if (row > 0)
+            if (loc.row > 0)
             {
-                count += grid.GetCell(row - 1, col) == true ? 1 : 0;
+                count += grid.GetCell(loc.Plus(new Coord(-1, 0))) == true ? 1 : 0;
             }
-            if (row < grid.sizeRows - 1)
+            if (loc.row < grid.gridSize.row - 1)
             {
-                count += grid.GetCell(row + 1, col) == true ? 1 : 0;
+                count += grid.GetCell(loc.Plus(new Coord(1, 0))) == true ? 1 : 0;
             }
-            if (col > 0)
+            if (loc.col > 0)
             {
-                count += grid.GetCell(row, col - 1) == true ? 1 : 0;
+                count += grid.GetCell(loc.Plus(new Coord(0, -1))) == true ? 1 : 0;
             }
-            if (col < grid.sizeCols - 1)
+            if (loc.col < grid.gridSize.col - 1)
             {
-                count += grid.GetCell(row, col + 1) == true ? 1 : 0;
+                count += grid.GetCell(loc.Plus(new Coord(0, 1))) == true ? 1 : 0;
             }
             return count;
         }
@@ -636,12 +654,12 @@ namespace Art
             return (int)(Math.Floor(numerator / denominator));
         }
 
-        public static List<Coord> EachPoint(int rows, int cols)
+        public static List<Coord> EachPoint(this Coord range)
         {
             var result = new List<Coord>();
-            for (int row = 0; row < rows; row++)
+            for (int row = 0; row < range.row; row++)
             {
-                for (int col = 0; col < cols; col++)
+                for (int col = 0; col < range.col; col++)
                 {
                     result.Add(new Coord(row, col));
                 }
@@ -649,13 +667,13 @@ namespace Art
             return result;
         }
 
-        public static List<List<T>> InitializeRect<T>(this List<List<T>> rect, int rows, int cols) where T : new()
+        public static List<List<T>> InitializeRect<T>(this List<List<T>> rect, Coord size) where T : new()
         {
             var result = new List<List<T>>();
-            for (int row = 0; row < rows; row++)
+            for (int row = 0; row < size.row; row++)
             {
                 var r = new List<T>();
-                for (int col = 0; col < cols; col++)
+                for (int col = 0; col < size.col; col++)
                 {
                     r.Add(new T());
                 }
@@ -664,12 +682,12 @@ namespace Art
             return result;
         }
 
-        public static Grid<T> ToGrid<T>(this List<T> list, int rows, int cols) where T : new()
+        public static Grid<T> ToGrid<T>(this List<T> list, Coord size) where T : new()
         {
-            var grid = new Grid<T>(rows, cols);
+            var grid = new Grid<T>(size);
             foreach(var C in grid.EachCell())
             {
-                C.value = list[(C.row * cols) + C.col];
+                C.value = list[(C.loc.row * size.col) + C.loc.col];
             }
             return grid;
         }
