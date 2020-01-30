@@ -42,7 +42,7 @@ namespace Art
 
         private Bitmap newBMP(Coord arg_size = null)
         {
-            if (size == null)
+            if (arg_size == null)
             {
                 arg_size = size;
             }
@@ -287,8 +287,8 @@ namespace Art
 
         public bool InRange(Coord topLeft, Coord bottomRight)
         {
-            if (topLeft.row >= 0 && topLeft.row < bottomRight.row
-                && topLeft.col >= 0 && topLeft.col < bottomRight.col)
+            if (topLeft.row <= row && bottomRight.row >= row
+                && topLeft.col <= col && bottomRight.col >= col)
             {
                 return true;
             }
@@ -336,16 +336,17 @@ namespace Art
     public class ArtColor
     {
         private int _red, _green, _blue, colorRange;
-        public int red { get => _red; set { _red = value.Clamp(0, colorRange); } }
+        public int red { get => _red; 
+            set { _red = value.Clamp(0, colorRange); } }
         public int green { get => _green; set { _green = value.Clamp(0, colorRange); } }
         public int blue { get => _blue; set { _blue = value.Clamp(0, colorRange); } }
 
         public ArtColor(int r, int g, int b, int _colorRange = 256)
         {
+            colorRange = _colorRange - 1;
             red = r;
             green = g;
             blue = b;
-            colorRange = _colorRange - 1;
         }
 
         public ArtColor()
@@ -415,7 +416,7 @@ namespace Art
 
         public bool InFrame(Coord loc)
         {
-            return loc.InRange(new Coord(0,0), gridSize);
+            return loc.InRange(new Coord(0,0), gridSize.Plus(new Coord(-1,-1)));
         }
 
         public Grid<T> Crop(Coord topLeft, Coord size)
@@ -450,9 +451,9 @@ namespace Art
         //      also: revisit this method when adding opacity
         public bool Stamp(Coord topLeft, Grid<T> grid)
         {
-            foreach (var C in EachPoint())
+            foreach (var C in grid.EachPoint())
             {
-                Coord offset = new Coord(topLeft.row + C.row, topLeft.col + C.col);
+                Coord offset = topLeft.Plus(C);
                 if (InFrame(offset))
                 {
                     SetCell(offset, grid.GetCell(C));
@@ -473,32 +474,32 @@ namespace Art
         private static Grid<bool> ResolveComponent(HilbertCurveComponent val)
         {
 
-            var result = new Grid<bool>(3, 3);
+            var result = new Grid<bool>(new Coord(3, 3));
             // corners are always true
-            result.SetCell(0, 0, true); // top left
-            result.SetCell(0, 2, true); // top right
-            result.SetCell(2, 0, true); // bottom left
-            result.SetCell(2, 2, true); // bottom right
+            result.SetCell(new Coord(0, 0), true); // top left
+            result.SetCell(new Coord(0, 2), true); // top right
+            result.SetCell(new Coord(2, 0), true); // bottom left
+            result.SetCell(new Coord(2, 2), true); // bottom right
             if (val == HilbertCurveComponent.A) // bottom missing
             {
-                result.SetCell(0, 1, true); // top middle
-                result.SetCell(1, 0, true); // left middle
-                result.SetCell(1, 2, true); // right middle
+                result.SetCell(new Coord(0, 1), true); // top middle
+                result.SetCell(new Coord(1, 0), true); // left middle
+                result.SetCell(new Coord(1, 2), true); // right middle
             } else if (val == HilbertCurveComponent.B) // right missing
             {
-                result.SetCell(0, 1, true); // top middle
-                result.SetCell(1, 0, true); // left middle
-                result.SetCell(2, 1, true); // bottom middle
+                result.SetCell(new Coord(0, 1), true); // top middle
+                result.SetCell(new Coord(1, 0), true); // left middle
+                result.SetCell(new Coord(2, 1), true); // bottom middle
             } else if (val == HilbertCurveComponent.C) // top missing
             {
-                result.SetCell(1, 0, true); // left middle
-                result.SetCell(1, 2, true); // right middle
-                result.SetCell(2, 1, true); // bottom middle
+                result.SetCell(new Coord(1, 0), true); // left middle
+                result.SetCell(new Coord(1, 2), true); // right middle
+                result.SetCell(new Coord(2, 1), true); // bottom middle
             } else if (val == HilbertCurveComponent.D) // left missing
             {
-                result.SetCell(0, 1, true); // top middle
-                result.SetCell(1, 2, true); // right middle
-                result.SetCell(2, 1, true); // bottom middle
+                result.SetCell(new Coord(0, 1), true); // top middle
+                result.SetCell(new Coord(1, 2), true); // right middle
+                result.SetCell(new Coord(2, 1), true); // bottom middle
             }
             return result;
         }
@@ -542,8 +543,8 @@ namespace Art
 
         private static Grid<HilbertCurveComponent> initialState(HilbertCurveComponent orientation)
         {
-            var result = new Grid<HilbertCurveComponent>(1, 1);
-            result.SetCell(0, 0, orientation);
+            var result = new Grid<HilbertCurveComponent>(new Coord(1,1));
+            result.SetCell(new Coord(0,0), orientation);
             return result;
         }
 
@@ -563,28 +564,28 @@ namespace Art
                 {
                     if (C.loc.row > 1) // check left connection
                     {
-                        if (CountNeighbors(result, C.loc.row - 2, C.loc.col) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.D)
+                        if (CountNeighbors(result, C.loc.Plus(new Coord(-2, 0))) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.D)
                         {
                             result.SetCell(C.loc.Plus(new Coord(-1, 0)), true);
                         }
                     }
                     if (C.loc.row < result.gridSize.row - 2) // check right connection
                     {
-                        if (CountNeighbors(result, C.loc.row + 2, C.loc.col) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.B)
+                        if (CountNeighbors(result, C.loc.Plus(new Coord(2, 0))) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.B)
                         {
                             result.SetCell(C.loc.Plus(new Coord(1, 0)), true);
                         }
                     }
                     if (C.loc.col > 1) // check up connection
                     {
-                        if (CountNeighbors(result, C.loc.row, C.loc.col - 2) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.C)
+                        if (CountNeighbors(result, C.loc.Plus(new Coord(0, -2))) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.C)
                         {
                             result.SetCell(C.loc.Plus(new Coord(0, -1)), true);
                         }
                     }
                     if (C.loc.col < result.gridSize.col - 2) // check down connection
                     {
-                        if (CountNeighbors(result, C.loc.row, C.loc.col + 2) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.A)
+                        if (CountNeighbors(result, C.loc.Plus(new Coord(0, 2))) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.A)
                         {
                             result.SetCell(C.loc.Plus(new Coord(0, 1)), true);
                         }
