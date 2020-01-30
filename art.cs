@@ -79,7 +79,7 @@ namespace Art
             }
             curve = temp;
 
-            curve = curve.Crop(new Coord(0,0), new Coord(gridSize));
+            curve = curve.Crop(new Coord(0,0), size);
 
             foreach (var cell in curve.EachCell())
             {
