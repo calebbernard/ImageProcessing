@@ -83,7 +83,8 @@ namespace Art
 
             foreach (var cell in curve.EachCell())
             {
-                canvas.SetCell(cell.loc, funColor2(cell.loc, cell.value));
+                ArtColor color = BinaryColor(cell.value, ArtColor.White.Blend(ArtColor.White, 75), ArtColor.Green.Blend(ArtColor.Red, 25));//funColor2(cell.loc, cell.value);
+                canvas.SetCell(cell.loc, color);
             }
         }
 
@@ -108,6 +109,11 @@ namespace Art
             green = 0;
             blue = 0;
             return new ArtColor(red, green, blue);
+        }
+
+        private ArtColor BinaryColor(bool value, ArtColor on, ArtColor off)
+        {
+            return value ? on : off;
         }
 
         private void blur()
@@ -336,8 +342,7 @@ namespace Art
     public class ArtColor
     {
         private int _red, _green, _blue, colorRange;
-        public int red { get => _red; 
-            set { _red = value.Clamp(0, colorRange); } }
+        public int red { get => _red; set { _red = value.Clamp(0, colorRange); } }
         public int green { get => _green; set { _green = value.Clamp(0, colorRange); } }
         public int blue { get => _blue; set { _blue = value.Clamp(0, colorRange); } }
 
@@ -360,6 +365,29 @@ namespace Art
         public System.Drawing.Color Render()
         {
             return System.Drawing.Color.FromArgb(red, green, blue);
+        }
+
+        public static readonly ArtColor Black = new ArtColor(0, 0, 0);
+
+        public static readonly ArtColor White = new ArtColor(255, 255, 255);
+        public static readonly ArtColor Red = new ArtColor(255, 0, 0);
+        public static readonly ArtColor Green = new ArtColor(0, 255, 0);
+        public static readonly ArtColor Blue = new ArtColor(0, 0, 255);
+
+        public ArtColor Blend(ArtColor mixer, int mixerPercent = 50)
+        {
+            if (mixerPercent <= 0)
+            {
+                return this;
+            } else if (mixerPercent >= 100)
+            {
+                return mixer;
+            }
+            var thisPercent = 100 - mixerPercent;
+            var mixRed = Methods.FloorDivide(((red * thisPercent) + (mixer.red * mixerPercent)), 100);
+            var mixGreen = Methods.FloorDivide(((green * thisPercent) + (mixer.green * mixerPercent)), 100);
+            var mixBlue = Methods.FloorDivide(((blue * thisPercent) + (mixer.blue * mixerPercent)), 100);
+            return new ArtColor(mixRed, mixGreen, mixBlue);
         }
     }
 
@@ -558,40 +586,45 @@ namespace Art
             }
 
             // 2. connect the blocks
-            foreach (var C in result.EachCell())
-            {
-                if (C.value == true && CountNeighbors(result, C.loc) == 1)
-                {
-                    if (C.loc.row > 1) // check left connection
-                    {
-                        if (CountNeighbors(result, C.loc.Plus(new Coord(-2, 0))) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.D)
-                        {
-                            result.SetCell(C.loc.Plus(new Coord(-1, 0)), true);
-                        }
-                    }
-                    if (C.loc.row < result.gridSize.row - 2) // check right connection
-                    {
-                        if (CountNeighbors(result, C.loc.Plus(new Coord(2, 0))) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.B)
-                        {
-                            result.SetCell(C.loc.Plus(new Coord(1, 0)), true);
-                        }
-                    }
-                    if (C.loc.col > 1) // check up connection
-                    {
-                        if (CountNeighbors(result, C.loc.Plus(new Coord(0, -2))) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.C)
-                        {
-                            result.SetCell(C.loc.Plus(new Coord(0, -1)), true);
-                        }
-                    }
-                    if (C.loc.col < result.gridSize.col - 2) // check down connection
-                    {
-                        if (CountNeighbors(result, C.loc.Plus(new Coord(0, 2))) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.A)
-                        {
-                            result.SetCell(C.loc.Plus(new Coord(0, 1)), true);
-                        }
-                    }
-                }
-            }
+            //Coord potentialConnection;
+            //foreach (var C in result.EachCell())
+            //{
+            //    if (C.value == true && CountNeighbors(result, C.loc) == 1)
+            //    {
+            //        if (C.loc.row > 1) // check left connection
+            //        {
+            //            potentialConnection = C.loc.Plus(new Coord(-2, 0));
+            //            if (result.InFrame(potentialConnection) && result.GetCell(potentialConnection) == true && CountNeighbors(result, potentialConnection) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.D)
+            //            {
+            //                result.SetCell(C.loc.Plus(new Coord(-1, 0)), true);
+            //            }
+            //        }
+            //        if (C.loc.row < result.gridSize.row - 2) // check right connection
+            //        {
+            //            potentialConnection = C.loc.Plus(new Coord(2, 0));
+            //            if (result.InFrame(potentialConnection) && result.GetCell(potentialConnection) == true && CountNeighbors(result, potentialConnection) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.B)
+            //            {
+            //                result.SetCell(C.loc.Plus(new Coord(1, 0)), true);
+            //            }
+            //        }
+            //        if (C.loc.col > 1) // check up connection
+            //        {
+            //            potentialConnection = C.loc.Plus(new Coord(0, -2));
+            //            if (result.InFrame(potentialConnection) && result.GetCell(potentialConnection) == true && CountNeighbors(result, potentialConnection) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.C)
+            //            {
+            //                result.SetCell(C.loc.Plus(new Coord(0, -1)), true);
+            //            }
+            //        }
+            //        if (C.loc.col < result.gridSize.col - 2) // check down connection
+            //        {
+            //            potentialConnection = C.loc.Plus(new Coord(0, 2));
+            //            if (result.InFrame(potentialConnection) && result.GetCell(potentialConnection) == true && CountNeighbors(result, potentialConnection) == 1 && curve.GetCell(C.loc.FloorDivide(4)) != HilbertCurveComponent.A)
+            //            {
+            //                result.SetCell(C.loc.Plus(new Coord(0, 1)), true);
+            //            }
+            //        }
+            //    }
+            //}
             return result;
         }
 
